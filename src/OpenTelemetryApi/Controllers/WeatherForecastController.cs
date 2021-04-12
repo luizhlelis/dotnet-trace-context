@@ -1,9 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using RabbitMQ.Client;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace OpenTelemetryApi.Controllers
 {
@@ -11,29 +16,55 @@ namespace OpenTelemetryApi.Controllers
     [Route("[controller]")]
     public class WeatherForecastController : ControllerBase
     {
-        private static readonly string[] Summaries = new[]
-        {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
-
         private readonly ILogger<WeatherForecastController> _logger;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
+        private readonly ConnectionFactory _connectionFactory;
 
-        public WeatherForecastController(ILogger<WeatherForecastController> logger)
+        public WeatherForecastController(
+            ILogger<WeatherForecastController> logger,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
+            ConnectionFactory connectionFactory)
         {
             _logger = logger;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
+            _connectionFactory = connectionFactory;
         }
 
-        [HttpGet]
-        public IEnumerable<WeatherForecast> Get()
+        [HttpPost]
+        public async Task<IActionResult> SendToTheOtherApi([FromBody] WeatherForecast weatherForecast)
         {
-            var rng = new Random();
-            return Enumerable.Range(1, 5).Select(index => new WeatherForecast
+            var request = new HttpRequestMessage(HttpMethod.Post, _configuration["ClientUrl"]);
+            //request.Headers.Add("Accept", "application/vnd.github.v3+json");
+            //request.Headers.Add("User-Agent", "HttpClientFactory-Sample");
+
+            var client = _httpClientFactory.CreateClient();
+            await client.SendAsync(request);
+
+            return Ok();
+        }
+
+        [HttpPost]
+        [Route("[controller]/PublishInQueue")]
+        public async Task<IActionResult> PublishInQueue([FromBody] WeatherForecast weatherForecast)
+        {
+            var message = JsonConvert.SerializeObject(weatherForecast);
+            var body = Encoding.UTF8.GetBytes(message);
+
+            using (var connection = _connectionFactory.CreateConnection())
             {
-                Date = DateTime.Now.AddDays(index),
-                TemperatureC = rng.Next(-20, 55),
-                Summary = Summaries[rng.Next(Summaries.Length)]
-            })
-            .ToArray();
+                using (var channel = connection.CreateModel())
+                {
+                    channel.QueueDeclare(queue: _configuration["RabbitMQ:QueueName"], durable: false,
+                        exclusive: false, autoDelete: false, arguments: null);
+
+                    channel.BasicPublish(exchange: "", routingKey: "hello", basicProperties: null, body: body);
+                }
+            }
+
+            return Ok();
         }
     }
 }

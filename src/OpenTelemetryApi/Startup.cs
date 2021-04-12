@@ -11,6 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using RabbitMQ.Client;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Trace;
 
 namespace OpenTelemetryApi
 {
@@ -26,12 +29,23 @@ namespace OpenTelemetryApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-
             services.AddControllers();
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "OpenTelemetryApi", Version = "v1" });
             });
+
+            services.AddHttpClient();
+            var factory = new ConnectionFactory() { HostName = Configuration["RabbitMQ:Url"] };
+            services.AddSingleton(factory);
+
+            services.AddOpenTelemetryTracing(config => config
+                .AddZipkinExporter(o =>
+                    {
+                        o.Endpoint = new Uri(Configuration["Zipkin:Url"]);
+                    })
+                .AddAspNetCoreInstrumentation()
+            );
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
