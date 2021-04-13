@@ -48,7 +48,7 @@ namespace OpenTelemetryApi.Controllers
 
         [HttpPost]
         [Route("[controller]/PublishInQueue")]
-        public async Task<IActionResult> PublishInQueue([FromBody] WeatherForecast weatherForecast)
+        public IActionResult PublishInQueue([FromBody] WeatherForecast weatherForecast)
         {
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
