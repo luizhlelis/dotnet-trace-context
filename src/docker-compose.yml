@@ -1,0 +1,54 @@
+version: "3.5"
+services:
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+  rabbit:
+    image: rabbitmq
+    container_name: rabbit
+    ports:
+      - "5672:5672"
+  first-api:
+    container_name: first-api
+    image: mcr.microsoft.com/dotnet/sdk:5.0
+    env_file:
+      - .env
+    volumes:
+      - ./OpenTelemetryApi:/api
+    working_dir: /api
+    depends_on:
+      - second-api
+      - zipkin
+    command: "dotnet run"
+    ports:
+      - "8001:8081"
+  second-api:
+    container_name: second-api
+    image: mcr.microsoft.com/dotnet/sdk:5.0
+    env_file:
+      - .env
+    volumes:
+      - ./OpenTelemetryApi:/api
+    working_dir: /api
+    depends_on:
+      - rabbit
+      - zipkin
+    command: "dotnet run"
+    ports:
+      - "7001:8081"
+  worker:
+    container_name: worker
+    image: mcr.microsoft.com/dotnet/sdk:5.0
+    env_file:
+      - .env
+    volumes:
+      - .:/continuous
+    working_dir: /continuous/Worker
+    depends_on:
+      - rabbit
+      - zipkin
+    command: "dotnet run"
+    ports:
+      - "6001:8081"     
