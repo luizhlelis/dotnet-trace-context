@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Trace;
 using RabbitMQ.Client;
 
 namespace Worker
@@ -36,6 +37,14 @@ namespace Worker
 
                     var factory = new ConnectionFactory() { HostName = configuration["RabbitMQ:Url"] };
                     services.AddSingleton(factory);
+
+                    services.AddOpenTelemetryTracing(config => config
+                        .AddZipkinExporter(o =>
+                        {
+                            o.Endpoint = new Uri(configuration["Zipkin:Url"]);
+                        })
+                    );
+
                 });
     }
 }
