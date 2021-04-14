@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Newtonsoft.Json;
 using System.Text;
+using System.Diagnostics;
 
 namespace OpenTelemetryApi.Controllers
 {
@@ -36,22 +37,21 @@ namespace OpenTelemetryApi.Controllers
         [HttpPost]
         public async Task<IActionResult> SendToTheOtherApi([FromBody] WeatherForecast weatherForecast)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, _configuration["ClientUrl"]);
-            //request.Headers.Add("Accept", "application/vnd.github.v3+json");
-            //request.Headers.Add("User-Agent", "HttpClientFactory-Sample");
-
+            Console.WriteLine(Activity.Current.Id);
             var client = _httpClientFactory.CreateClient();
-            await client.SendAsync(request);
+            var content = new StringContent(JsonConvert.SerializeObject(weatherForecast), Encoding.UTF8, "application/json");
+            await client.PostAsync(_configuration["ClientUrl"], content);
 
             return Ok();
         }
 
         [HttpPost]
-        [Route("[controller]/PublishInQueue")]
+        [Route("PublishInQueue")]
         public IActionResult PublishInQueue([FromBody] WeatherForecast weatherForecast)
         {
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
+            Console.WriteLine(Activity.Current.Id);
 
             using (var connection = _connectionFactory.CreateConnection())
             {
