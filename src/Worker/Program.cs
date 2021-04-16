@@ -35,7 +35,10 @@ namespace Worker
 
                     services.AddHostedService<WorkerBackgroundService>();
 
-                    var factory = new ConnectionFactory() { HostName = configuration["RabbitMQ:Url"] };
+                    var factory = new ConnectionFactory
+                    {
+                        Uri = new Uri(configuration["RabbitMQ:Url"])
+                    };
                     services.AddSingleton(factory);
 
                     services.AddOpenTelemetryTracing(config => config
