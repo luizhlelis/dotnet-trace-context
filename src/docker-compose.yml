@@ -10,6 +10,10 @@ services:
     container_name: rabbit
     ports:
       - "5672:5672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+      - RABBITMQ_DEFAULT_VHOST=my_vhost
   first-api:
     container_name: first-api
     image: mcr.microsoft.com/dotnet/sdk:5.0
