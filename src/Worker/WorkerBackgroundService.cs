@@ -18,19 +18,12 @@ namespace Worker
 
         public WorkerBackgroundService(
             ILogger<WorkerBackgroundService> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ConnectionFactory connectionFactory)
         {
             _logger = logger;
             _configuration = configuration;
-
-            _connectionFactory = new ConnectionFactory
-            {
-                HostName = _configuration["RabbitMq:HostName"],
-                Port = _configuration.GetValue<int>("RabbitMq:Port"),
-                UserName = _configuration["RabbitMq:UserName"],
-                Password = _configuration["RabbitMq:Password"],
-                VirtualHost = _configuration["RabbitMq:VirtualHost"]
-            };
+            _connectionFactory = connectionFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -39,8 +32,8 @@ namespace Worker
             {
                 using (var channel = connection.CreateModel())
                 {
-                    channel.QueueDeclare(queue: _configuration["RabbitMq:QueueName"], durable: false,
-                        exclusive: false, autoDelete: false, arguments: null);
+                    channel.QueueDeclare(queue: _configuration["RabbitMq:QueueName"],
+                        durable: false, exclusive: false, autoDelete: false, arguments: null);
 
                     var consumer = new EventingBasicConsumer(channel);
 
@@ -51,7 +44,9 @@ namespace Worker
                         _logger.LogInformation(" [x] Received {0}", message);
                     };
 
-                    channel.BasicConsume(queue: "hello", autoAck: true, consumer: consumer);
+                    channel.BasicConsume(queue: _configuration["RabbitMq:QueueName"],
+                        autoAck: true,
+                        consumer: consumer);
                 }
             }
 

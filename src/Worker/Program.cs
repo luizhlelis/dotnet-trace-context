@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Trace;
+using RabbitMQ.Client;
 
 namespace Worker
 {
@@ -31,14 +32,14 @@ namespace Worker
 
                     services.AddHostedService<WorkerBackgroundService>();
 
-                    //var factory = new ConnectionFactory
-                    //{
-                    //    Uri = new Uri(configuration["RabbitMQ:Url"])
-                    //};
-                    //services.AddSingleton(factory);
-
-                    //var rabbitMqSection = configuration.GetSection("RabbitMq");
-                    //var exchangeSection = configuration.GetSection("RabbitMqExchange");
+                    services.AddSingleton(new ConnectionFactory
+                    {
+                        HostName = configuration["RabbitMq:HostName"],
+                        Port = configuration.GetValue<int>("RabbitMq:Port"),
+                        UserName = configuration["RabbitMq:UserName"],
+                        Password = configuration["RabbitMq:Password"],
+                        VirtualHost = configuration["RabbitMq:VirtualHost"]
+                    });
 
                     services.AddOpenTelemetryTracing(config => config
                         .AddZipkinExporter(o =>
