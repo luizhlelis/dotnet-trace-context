@@ -36,8 +36,15 @@ namespace OpenTelemetryApi
             });
 
             services.AddHttpClient();
-            var factory = new ConnectionFactory() { HostName = Configuration["RabbitMQ:Url"] };
-            services.AddSingleton(factory);
+
+            services.AddSingleton(new ConnectionFactory
+            {
+                HostName = Configuration["RabbitMq:HostName"],
+                Port = Configuration.GetValue<int>("RabbitMq:Port"),
+                UserName = Configuration["RabbitMq:UserName"],
+                Password = Configuration["RabbitMq:Password"],
+                VirtualHost = Configuration["RabbitMq:VirtualHost"]
+            });
 
             services.AddOpenTelemetryTracing(config => config
                 .AddZipkinExporter(o =>
