@@ -11,6 +11,5 @@
     <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.0.1" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc2" />
     <PackageReference Include="RabbitMQ.Client" Version="6.2.1" />
-    <PackageReference Include="RabbitMQ.Client.Core.DependencyInjection" Version="4.3.0" />
   </ItemGroup>
 </Project>
