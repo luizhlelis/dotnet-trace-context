@@ -37,7 +37,7 @@ namespace OpenTelemetryApi.Controllers
         [HttpPost]
         public async Task<IActionResult> SendToTheOtherApi([FromBody] WeatherForecast weatherForecast)
         {
-            Console.WriteLine(Activity.Current.Id);
+            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
             var client = _httpClientFactory.CreateClient();
             var content = new StringContent(JsonConvert.SerializeObject(weatherForecast), Encoding.UTF8, "application/json");
             await client.PostAsync(_configuration["ClientUrl"], content);
@@ -51,7 +51,7 @@ namespace OpenTelemetryApi.Controllers
         {
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
-            Console.WriteLine(Activity.Current.Id);
+            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
 
             using (var connection = _connectionFactory.CreateConnection())
             {

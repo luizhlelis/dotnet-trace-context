@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,6 +43,7 @@ namespace Worker
                         var body = ea.Body.ToArray();
                         var message = Encoding.UTF8.GetString(body);
                         _logger.LogInformation(" [x] Received {0}", message);
+                        _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
                     };
 
                     channel.BasicConsume(queue: _configuration["RabbitMq:QueueName"],
