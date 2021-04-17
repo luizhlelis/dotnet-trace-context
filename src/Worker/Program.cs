@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Trace;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Core.DependencyInjection;
 
 namespace Worker
 {
@@ -35,11 +36,18 @@ namespace Worker
 
                     services.AddHostedService<WorkerBackgroundService>();
 
-                    var factory = new ConnectionFactory
-                    {
-                        Uri = new Uri(configuration["RabbitMQ:Url"])
-                    };
-                    services.AddSingleton(factory);
+                    //var factory = new ConnectionFactory
+                    //{
+                    //    Uri = new Uri(configuration["RabbitMQ:Url"])
+                    //};
+                    //services.AddSingleton(factory);
+
+                    var rabbitMqSection = configuration.GetSection("RabbitMq");
+                    var exchangeSection = configuration.GetSection("RabbitMqExchange");
+
+                    services.AddRabbitMqClient(rabbitMqSection)
+                        .AddConsumptionExchange("exchange.name", exchangeSection)
+                        .AddMessageHandlerTransient<WeatherMessageHandler>("routing.key");
 
                     services.AddOpenTelemetryTracing(config => config
                         .AddZipkinExporter(o =>
