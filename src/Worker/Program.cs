@@ -3,6 +3,7 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using RabbitMQ.Client;
 
@@ -42,10 +43,12 @@ namespace Worker
                     });
 
                     services.AddOpenTelemetryTracing(config => config
+                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(configuration["Zipkin:AppName"]))
                         .AddZipkinExporter(o =>
                         {
                             o.Endpoint = new Uri(configuration["Zipkin:Url"]);
                         })
+                        .AddAspNetCoreInstrumentation()
                     );
 
                 });

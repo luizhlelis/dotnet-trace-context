@@ -16,6 +16,9 @@ namespace Worker
         private readonly ILogger<WorkerBackgroundService> _logger;
         private readonly IConfiguration _configuration;
         private readonly ConnectionFactory _connectionFactory;
+        private readonly IConnection _rabbitConnection;
+        private readonly IModel _rabbitChanel;
+        private EventingBasicConsumer RabbitEventConsumer;
 
         public WorkerBackgroundService(
             ILogger<WorkerBackgroundService> logger,
@@ -25,32 +28,39 @@ namespace Worker
             _logger = logger;
             _configuration = configuration;
             _connectionFactory = connectionFactory;
+
+            _rabbitConnection = _connectionFactory.CreateConnection();
+            _rabbitChanel = _rabbitConnection.CreateModel();
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            using (var connection = _connectionFactory.CreateConnection())
+            _rabbitChanel.QueueDeclare(
+                queue: _configuration["RabbitMq:QueueName"],
+                durable: false,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null);
+
+            RabbitEventConsumer = new EventingBasicConsumer(_rabbitChanel);
+
+            RabbitEventConsumer.Received += (model, eventArgs) =>
             {
-                using (var channel = connection.CreateModel())
-                {
-                    channel.QueueDeclare(queue: _configuration["RabbitMq:QueueName"],
-                        durable: false, exclusive: false, autoDelete: false, arguments: null);
+                var messageHandlingActivity = new Activity(_configuration["Zipkin:AppName"]);
+                messageHandlingActivity.Start();
 
-                    var consumer = new EventingBasicConsumer(channel);
+                var body = eventArgs.Body.ToArray();
+                var message = Encoding.UTF8.GetString(body);
+                _logger.LogInformation(" [x] Received {0}", message);
+                _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
 
-                    consumer.Received += (model, ea) =>
-                    {
-                        var body = ea.Body.ToArray();
-                        var message = Encoding.UTF8.GetString(body);
-                        _logger.LogInformation(" [x] Received {0}", message);
-                        _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
-                    };
+                messageHandlingActivity.Stop();
+            };
 
-                    channel.BasicConsume(queue: _configuration["RabbitMq:QueueName"],
-                        autoAck: true,
-                        consumer: consumer);
-                }
-            }
+            _rabbitChanel.BasicConsume(
+                queue: _configuration["RabbitMq:QueueName"],
+                autoAck: true,
+                consumer: RabbitEventConsumer);
 
             _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
@@ -63,6 +73,8 @@ namespace Worker
         public override async Task StopAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Stopping queue listener...");
+            _rabbitChanel.Dispose();
+            _rabbitConnection.Dispose();
             await base.StopAsync(stoppingToken);
         }
     }
