@@ -6,10 +6,11 @@ services:
     ports:
       - "9411:9411"
   rabbit:
-    image: rabbitmq
+    image: rabbitmq:3-management
     container_name: rabbit
     ports:
       - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -23,6 +24,7 @@ services:
       - Zipkin__AppName=first-api
     volumes:
       - ./OpenTelemetryApi:/api
+      - /obj/Debug/
     working_dir: /api
     depends_on:
       - rabbit
@@ -39,6 +41,7 @@ services:
       - Zipkin__AppName=second-api
     volumes:
       - ./OpenTelemetryApi:/api
+      - /obj/Debug/
     working_dir: /api
     depends_on:
       - rabbit
@@ -55,6 +58,7 @@ services:
       - Zipkin__AppName=worker
     volumes:
       - .:/continuous
+      - /obj/Debug/
     working_dir: /continuous/Worker
     depends_on:
       - rabbit
