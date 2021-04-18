@@ -57,10 +57,18 @@ namespace OpenTelemetryApi.Controllers
             {
                 using (var channel = connection.CreateModel())
                 {
-                    channel.QueueDeclare(queue: _configuration["RabbitMq:QueueName"], durable: false,
-                        exclusive: false, autoDelete: false, arguments: null);
+                    channel.QueueDeclare(
+                        queue: _configuration["RabbitMq:QueueName"],
+                        durable: false,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null);
 
-                    channel.BasicPublish(exchange: "", routingKey: "hello", basicProperties: null, body: body);
+                    channel.BasicPublish(
+                        exchange: "",
+                        routingKey: _configuration["RabbitMq:QueueName"],
+                        basicProperties: null,
+                        body: body);
                 }
             }
 
