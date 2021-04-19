@@ -35,6 +35,8 @@ namespace Worker
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            object traceparent;
+
             _rabbitChanel.QueueDeclare(
                 queue: _configuration["RabbitMq:QueueName"],
                 durable: false,
@@ -46,7 +48,14 @@ namespace Worker
 
             RabbitEventConsumer.Received += (model, eventArgs) =>
             {
+                var traceParentFound = eventArgs.BasicProperties
+                    .Headers.TryGetValue("traceparent", out traceparent);
+
+                if (traceParentFound && (traceparent is byte[] bytes))
+                    traceparent = Encoding.UTF8.GetString(bytes);
+
                 var messageHandlingActivity = new Activity(_configuration["Zipkin:AppName"]);
+                messageHandlingActivity.SetParentId(traceparent.ToString());
                 messageHandlingActivity.Start();
 
                 var body = eventArgs.Body.ToArray();

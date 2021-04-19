@@ -51,7 +51,8 @@ namespace OpenTelemetryApi.Controllers
         {
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
-            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
+            var traceparent = Activity.Current.Id;
+            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", traceparent);
 
             using (var connection = _connectionFactory.CreateConnection())
             {
@@ -64,10 +65,14 @@ namespace OpenTelemetryApi.Controllers
                         autoDelete: false,
                         arguments: null);
 
+                    var basicProps = channel.CreateBasicProperties();
+                    basicProps.Headers = new Dictionary<string, object>();
+                    basicProps.Headers.TryAdd("traceparent", traceparent);
+
                     channel.BasicPublish(
                         exchange: "",
                         routingKey: _configuration["RabbitMq:QueueName"],
-                        basicProperties: null,
+                        basicProperties: basicProps,
                         body: body);
                 }
             }
