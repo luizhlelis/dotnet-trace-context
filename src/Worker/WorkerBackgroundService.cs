@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -18,7 +20,8 @@ namespace Worker
         private readonly ConnectionFactory _connectionFactory;
         private readonly IConnection _rabbitConnection;
         private readonly IModel _rabbitChanel;
-        private EventingBasicConsumer RabbitEventConsumer;
+        private readonly TextMapPropagator _propagator;
+        private static readonly ActivitySource _activitySource = new ActivitySource(nameof(WorkerBackgroundService));
 
         public WorkerBackgroundService(
             ILogger<WorkerBackgroundService> logger,
@@ -31,12 +34,11 @@ namespace Worker
 
             _rabbitConnection = _connectionFactory.CreateConnection();
             _rabbitChanel = _rabbitConnection.CreateModel();
+            _propagator = new TraceContextPropagator();
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            object traceparent;
-
             _rabbitChanel.QueueDeclare(
                 queue: _configuration["RabbitMq:QueueName"],
                 durable: false,
@@ -44,38 +46,37 @@ namespace Worker
                 autoDelete: false,
                 arguments: null);
 
-            RabbitEventConsumer = new EventingBasicConsumer(_rabbitChanel);
-
-            RabbitEventConsumer.Received += (model, eventArgs) =>
-            {
-                var traceParentFound = eventArgs.BasicProperties
-                    .Headers.TryGetValue("traceparent", out traceparent);
-
-                if (traceParentFound && (traceparent is byte[] bytes))
-                    traceparent = Encoding.UTF8.GetString(bytes);
-
-                var messageHandlingActivity = new Activity(_configuration["Zipkin:AppName"]);
-                messageHandlingActivity.SetParentId(traceparent.ToString());
-                messageHandlingActivity.Start();
-
-                var body = eventArgs.Body.ToArray();
-                var message = Encoding.UTF8.GetString(body);
-                _logger.LogInformation(" [x] Received {0}", message);
-                _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
-
-                messageHandlingActivity.Stop();
-            };
-
-            _rabbitChanel.BasicConsume(
-                queue: _configuration["RabbitMq:QueueName"],
-                autoAck: true,
-                consumer: RabbitEventConsumer);
+            RabbitMqHelper.StartConsumer(_rabbitChanel, _configuration, MessageHandler);
 
             _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 await Task.Delay(1000, stoppingToken);
+            }
+        }
+
+        public void MessageHandler(BasicDeliverEventArgs eventArgs)
+        {
+            // Extract the PropagationContext of the upstream parent from the message headers.
+            var parentContext = _propagator.Extract(
+                default,
+                eventArgs.BasicProperties,
+                RabbitMqHelper.ExtractTraceContextFromBasicProperties);
+            Baggage.Current = parentContext.Baggage;
+
+            using (var activity = _activitySource.StartActivity(
+                _configuration["Zipkin:AppName"],
+                ActivityKind.Consumer,
+                parentContext.ActivityContext))
+            {
+                var body = eventArgs.Body.ToArray();
+                var message = Encoding.UTF8.GetString(body);
+                _logger.LogInformation("Received {0}", message);
+                _logger.LogInformation("Traceparent: {0}", Activity.Current.Id);
+
+                activity.SetTag("message", message);
+                RabbitMqHelper.AddMessagingTags(activity, _configuration);
             }
         }
 
