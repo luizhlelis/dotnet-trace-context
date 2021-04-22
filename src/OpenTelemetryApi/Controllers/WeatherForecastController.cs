@@ -37,7 +37,7 @@ namespace OpenTelemetryApi.Controllers
         [HttpPost]
         public async Task<IActionResult> SendToTheOtherApi([FromBody] WeatherForecast weatherForecast)
         {
-            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", Activity.Current.Id);
+            _logger.LogInformation("Traceparent: {0}", Activity.Current.Id);
             var client = _httpClientFactory.CreateClient();
             var content = new StringContent(JsonConvert.SerializeObject(weatherForecast), Encoding.UTF8, "application/json");
             await client.PostAsync(_configuration["ClientUrl"], content);
@@ -52,7 +52,7 @@ namespace OpenTelemetryApi.Controllers
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
             var traceparent = Activity.Current.Id;
-            _logger.LogInformation(">>>>>>>>>>>>> Traceparent: {0}", traceparent);
+            _logger.LogInformation("Traceparent: {0}", traceparent);
 
             using (var connection = _connectionFactory.CreateConnection())
             {
@@ -66,8 +66,13 @@ namespace OpenTelemetryApi.Controllers
                         arguments: null);
 
                     var basicProps = channel.CreateBasicProperties();
+
                     basicProps.Headers = new Dictionary<string, object>();
                     basicProps.Headers.TryAdd("traceparent", traceparent);
+                    Activity.Current.SetTag("messaging.system", "rabbitmq");
+                    Activity.Current.SetTag("messaging.destination_kind", "queue");
+                    Activity.Current.SetTag("messaging.destination", "");
+                    Activity.Current.SetTag("messaging.rabbitmq.routing_key", _configuration["RabbitMq:QueueName"]);
 
                     channel.BasicPublish(
                         exchange: "",
