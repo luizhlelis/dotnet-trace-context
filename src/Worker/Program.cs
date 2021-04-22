@@ -43,12 +43,14 @@ namespace Worker
                     });
 
                     services.AddOpenTelemetryTracing(config => config
-                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(configuration["Zipkin:AppName"]))
+                        .SetResourceBuilder(ResourceBuilder
+                            .CreateDefault()
+                            .AddService(nameof(WorkerBackgroundService)))
+                        .AddSource(nameof(WorkerBackgroundService))
                         .AddZipkinExporter(o =>
                         {
                             o.Endpoint = new Uri(configuration["Zipkin:Url"]);
                         })
-                        .AddAspNetCoreInstrumentation()
                     );
 
                 });
