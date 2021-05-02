@@ -74,6 +74,7 @@ namespace Worker
                 var message = Encoding.UTF8.GetString(body);
                 _logger.LogInformation("Received {0}", message);
                 _logger.LogInformation("Traceparent: {0}", Activity.Current.Id);
+                _logger.LogInformation("Tracestate: {0}", Activity.Current.TraceStateString);
 
                 activity.SetTag("message", message);
                 RabbitMqHelper.AddMessagingTags(activity, _configuration);
