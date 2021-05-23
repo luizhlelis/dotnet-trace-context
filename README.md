@@ -1,4 +1,6 @@
-# Dotnet Trace Context
+# [c#] Using W3C Trace Context standard in distributed tracing
+
+In my last [article](https://dev.to/luizhlelis/using-w3c-trace-context-standard-in-distributed-tracing-3743), I wrote about the W3C trace context standard and what kind of problem it came to solve. The current article purpose is to show the trace context usage in a microservice architecture. For the first practical example, I chose to develop all aplications using c# with `.NET 5` and up all of them locally via docker-compose. Hope you enjoy it!
 
 System that shows a [W3C trace context](https://www.w3.org/TR/trace-context) and [AMQP W3C trace context](https://w3c.github.io/trace-context-amqp/#traceparent-amqp-format) example in `.NET 5`. I choose the [sample WeatherForecast API](https://docs.microsoft.com/aspnet/core/tutorials/first-web-api?view=aspnetcore-5.0&tabs=visual-studio) to develop this POC.
 
@@ -25,7 +27,7 @@ The first and second APIs have the [same code base](./src/OpenTelemetryApi), but
 Inside [src folder](./src), type the command below to up all containers (`first-api`, `second-api`, `worker`, `rabbit` and `zipkin`):
 
 ```bash
-docker-compose up
+  docker-compose up
 ```
 
 wait for all containers get on and then send a request to the `first-api`:
@@ -44,7 +46,7 @@ curl --request POST \
 the message that you sent above will travel throughout the flow (`first-api` > `second-api` >  `rabbit` > `worker`) along with the propagation fields (`traceparent` and `tracestate`). To see the generated distributed tracing diagram, access `zipkin` in your browser:
 
 ```bash
-http://localhost:9411/
+  http://localhost:9411/
 ```
 
 at home page, let the search field empty and type `RUN QUERY` to load all traces. Finally, click in your trace, then you'll see a diagram like this:
