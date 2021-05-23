@@ -1,6 +1,7 @@
 # Dotnet Trace Context
 
 System that shows a [W3C trace context](https://www.w3.org/TR/trace-context) and [AMQP W3C trace context](https://w3c.github.io/trace-context-amqp/#traceparent-amqp-format) example in `.NET 5`. I choose the [sample WeatherForecast API](https://docs.microsoft.com/aspnet/core/tutorials/first-web-api?view=aspnetcore-5.0&tabs=visual-studio) to develop this POC.
+
 ## Trace context propagation through http calls
 
 As the standard recomends, fields `traceparent` and `tracestate` SHOULD be added in the request header.
