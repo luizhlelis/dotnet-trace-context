@@ -1,6 +1,6 @@
 # [c#] Using W3C Trace Context standard in distributed tracing
 
-In my last [article](https://dev.to/luizhlelis/using-w3c-trace-context-standard-in-distributed-tracing-3743), I wrote about the W3C trace context standard and what kind of problem it came to solve. The current article purpose is to show the trace context usage in a microservice architecture. For the first practical example, I chose to develop all aplications using c# with `.NET 5` and up all of them locally via docker-compose. Hope you enjoy it!
+In my last [article](https://dev.to/luizhlelis/using-w3c-trace-context-standard-in-distributed-tracing-3743), I wrote about the W3C trace context standard and what kind of problem it came to solve. The current article purpose is show the trace context usage in a microservice architecture. For the first practical example, I chose to develop all aplications using c# with `.NET 5` and run all of them locally via docker-compose. Hope you enjoy it!
 
 System that shows a [W3C trace context](https://www.w3.org/TR/trace-context) and [AMQP W3C trace context](https://w3c.github.io/trace-context-amqp/#traceparent-amqp-format) example in `.NET 5`. I choose the [sample WeatherForecast API](https://docs.microsoft.com/aspnet/core/tutorials/first-web-api?view=aspnetcore-5.0&tabs=visual-studio) to develop this POC.
 
