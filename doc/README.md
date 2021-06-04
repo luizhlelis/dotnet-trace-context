@@ -12,6 +12,16 @@ The main objective is to propagate a message with `traceparent` id throw two api
 
 the first and second APIs have the [same code base](../src/OpenTelemetryApi), but they're deployed in different containers.
 
+## OpenTelemetry
+
+An important framework used in the present article to deal with the different traces is [OpenTelemetry](https://opentelemetry.io/). As the documentation saids:
+
+> OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs.
+
+[OTel](https://opentelemetry.io/docs/concepts/glossary/) provides a vendor-agnostic instrumentation library to generate, emit, collect, process and export telemetry data. That's not only the only purpose of `OTel`, which is composed by multiple components: proto, specification, collector, instrumentation libraries; but that's subject for other article.
+
+`W3C TraceContext` is one of the [propagators](https://github.com/open-telemetry/opentelemetry-specification/blob/b46bcab5fb709381f1fd52096a19541370c7d1b3/specification/context/api-propagators.md#propagators-distribution) maintained and distributed as extension packages by `OTel`. That's the reason why `OTel` is aways related to `W3C TraceContext` and vice versa.
+
 ## Running the project
 
 Inside [src folder](./src), type the command below to up all containers (`first-api`, `second-api`, `worker`, `rabbit` and `zipkin`):
