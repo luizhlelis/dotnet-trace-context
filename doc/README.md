@@ -24,6 +24,8 @@ An important framework used in the present article to deal with the different tr
 
 ## Talk is cheap, show me the code
 
+> The source code could be found in [this github repo](https://github.com/luizhlelis/dotnet-trace-context).
+
 The default diagnostics library in `.NET 5`, called [System.Diagnostics](https://docs.microsoft.com/en-us/dotnet/api/system.diagnostics?view=net-5.0), is already prepared to propagate the context based on W3C TraceContext specification. In previous `.NET Core` versions, the context was propagated with an [hierarchical identifier format](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Diagnostics.DiagnosticSource/src/ActivityUserGuide.md#id-format) by default. On `.NET Core 3.0`, the identifier format setup started to be available, see [this](https://stackoverflow.com/questions/61251914/how-can-i-access-w3c-tracecontext-headers-in-a-net-core-3-1-application/67086305#67086305) stackoverflow question for more information about how to configure w3c's format in previous `.NET Core` versions.
 
 The `first-api` and the `second-api` showed in [Figure 1](#firstfigure) requires three packages to work properly with `OpenTelemetry`:
@@ -34,9 +36,20 @@ The `first-api` and the `second-api` showed in [Figure 1](#firstfigure) requires
     <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.0.1" />
 ```
 
-the `OpenTelemetry.Extensions.Hosting` package is responsible for register `OpenTelemetry` into the application using Dependency Injection, the `OpenTelemetry.Instrumentation.AspNetCore` and `OpenTelemetry.Exporter.Zipkin` packages represents two source components of `OpenTelemetry` framework: the instrumentation library and the collector respectively. The [instrumentation library](https://opentelemetry.io/docs/concepts/instrumenting/) is responsible to inject the observable information from libraries and applications into the OpenTelemetry API. On the other hand, the [collector](https://opentelemetry.io/docs/concepts/data-collection/) offers a vendor-agnostic implementation on how to receive, process, and export telemetry data, the exporter specifically is the place where to send the received data (`zipkin` was the chosen for our example).
+the `OpenTelemetry.Extensions.Hosting` package is responsible for register `OpenTelemetry` into the application using Dependency Injection, the `OpenTelemetry.Instrumentation.AspNetCore` and `OpenTelemetry.Exporter.Zipkin` packages represents two source components of `OpenTelemetry` framework: the instrumentation library and the collector respectively. The [instrumentation library](https://opentelemetry.io/docs/concepts/instrumenting/) is responsible to inject the observable information from libraries and applications into the OpenTelemetry API. On the other hand, the [collector](https://opentelemetry.io/docs/concepts/data-collection/) offers a vendor-agnostic implementation on how to receive, process, and export telemetry data, the exporter specifically is the place where to send the received data (`zipkin` was the chosen for our example). The `OTel`'s dependency injection was done in `Startup.cs`:
 
-As cited before, the `first-api` and the `second-api` have the [same code base](../src/OpenTelemetryApi), but for this example, the first is called by a client (`curl`) in the `WeatherForecast` route which calls the second one in the `PublishInQueue` route. Both controller methods have a stdout print for `tracestate` and `traceparent`:
+``` csharp
+    services.AddOpenTelemetryTracing(builder => builder
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Configuration["Zipkin:AppName"]))
+        .AddZipkinExporter(o =>
+            {
+                o.Endpoint = new Uri(Configuration["Zipkin:Url"]);
+            })
+        .AddAspNetCoreInstrumentation()
+    );
+```
+
+As mentioned before, the `first-api` and the `second-api` have the [same code base](../src/OpenTelemetryApi). For this example, the first is called by a client (`curl`) in `WeatherForecast` route which calls the second one in the `PublishInQueue` route. Both controller methods have a stdout print for `traceparent` and `tracestate`:
 
 ``` csharp
     [ApiController]
@@ -113,6 +126,32 @@ As cited before, the `first-api` and the `second-api` have the [same code base](
             return Ok();
         }
     }
+```
+
+By default, the `ASP.NET core` starts an `Activity` span when the [request is beginning](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L59) and stop it [at the end](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L156) so this kind of setup was not required for the `first-api` and the `second-api`. On the other hand, the manually creation of an activity span is required for the `worker` because that kind of span is outside from http calls, is not an API, but it's a message listener.
+
+> **_NOTE:_** `ASP.NET core` also sets the `traceparent` from the upstream request as [the current activity ParentId](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L289).
+
+For the `worker` those packages are required:
+
+``` csharp
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc2" />
+    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.0.1" />
+```
+
+and the `OTel`'s dependency injection was configured to the `worker` in `Program.cs` like the following bellow:
+
+``` csharp
+    services.AddOpenTelemetryTracing(config => config
+        .SetResourceBuilder(ResourceBuilder
+            .CreateDefault()
+            .AddService(typeof(WorkerBackgroundService).Namespace))
+        .AddSource(typeof(WorkerBackgroundService).Namespace)
+        .AddZipkinExporter(o =>
+        {
+            o.Endpoint = new Uri(configuration["Zipkin:Url"]);
+        })
+    );
 ```
 
 ## Running the project
