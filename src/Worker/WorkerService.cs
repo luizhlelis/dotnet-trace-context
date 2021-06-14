@@ -13,18 +13,18 @@ using RabbitMQ.Client.Events;
 
 namespace Worker
 {
-    public class WorkerBackgroundService : BackgroundService
+    public class WorkerService : BackgroundService
     {
-        private readonly ILogger<WorkerBackgroundService> _logger;
+        private readonly ILogger<WorkerService> _logger;
         private readonly IConfiguration _configuration;
         private readonly ConnectionFactory _connectionFactory;
         private readonly IConnection _rabbitConnection;
         private readonly IModel _rabbitChanel;
         private readonly TextMapPropagator _propagator;
-        private static readonly ActivitySource _activitySource = new ActivitySource(nameof(WorkerBackgroundService));
+        private static readonly ActivitySource _activitySource = new ActivitySource(nameof(WorkerService));
 
-        public WorkerBackgroundService(
-            ILogger<WorkerBackgroundService> logger,
+        public WorkerService(
+            ILogger<WorkerService> logger,
             IConfiguration configuration,
             ConnectionFactory connectionFactory)
         {
@@ -58,7 +58,7 @@ namespace Worker
 
         public void MessageHandler(BasicDeliverEventArgs eventArgs)
         {
-            // Extract the PropagationContext of the upstream parent from the message headers.
+            // Extract the PropagationContext from the upstream service using message headers.
             var parentContext = _propagator.Extract(
                 default,
                 eventArgs.BasicProperties,

@@ -31,7 +31,7 @@ namespace Worker
                 {
                     var configuration = BuildAppConfiguration();
 
-                    services.AddHostedService<WorkerBackgroundService>();
+                    services.AddHostedService<WorkerService>();
 
                     services.AddSingleton(new ConnectionFactory
                     {
@@ -45,8 +45,8 @@ namespace Worker
                     services.AddOpenTelemetryTracing(config => config
                         .SetResourceBuilder(ResourceBuilder
                             .CreateDefault()
-                            .AddService(nameof(WorkerBackgroundService)))
-                        .AddSource(nameof(WorkerBackgroundService))
+                            .AddService(nameof(WorkerService)))
+                        .AddSource(nameof(WorkerService))
                         .AddZipkinExporter(o =>
                         {
                             o.Endpoint = new Uri(configuration["Zipkin:Url"]);
