@@ -8,6 +8,8 @@ using RabbitMQ.Client;
 using Newtonsoft.Json;
 using System.Text;
 using System.Diagnostics;
+using OpenTelemetry.Context.Propagation;
+using OpenTelemetry;
 
 namespace OpenTelemetryApi.Controllers
 {
@@ -19,6 +21,7 @@ namespace OpenTelemetryApi.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ConnectionFactory _connectionFactory;
+        private readonly TextMapPropagator _propagator = Propagators.DefaultTextMapPropagator;
 
         public WeatherForecastController(
             ILogger<WeatherForecastController> logger,
@@ -51,8 +54,9 @@ namespace OpenTelemetryApi.Controllers
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
             var traceparent = Activity.Current.Id;
+            var tracestate = Activity.Current.TraceStateString;
             _logger.LogInformation("Traceparent: {0}", traceparent);
-            _logger.LogInformation("Tracestate: {0}", Activity.Current.TraceStateString);
+            _logger.LogInformation("Tracestate: {0}", tracestate);
 
             using (var connection = _connectionFactory.CreateConnection())
             {
@@ -67,12 +71,14 @@ namespace OpenTelemetryApi.Controllers
 
                     var basicProps = channel.CreateBasicProperties();
 
-                    basicProps.Headers = new Dictionary<string, object>();
-                    basicProps.Headers.TryAdd("traceparent", traceparent);
-                    Activity.Current.SetTag("messaging.system", "rabbitmq");
-                    Activity.Current.SetTag("messaging.destination_kind", "queue");
-                    Activity.Current.SetTag("messaging.destination", "");
-                    Activity.Current.SetTag("messaging.rabbitmq.routing_key", _configuration["RabbitMq:QueueName"]);
+                    // Inject the ActivityContext into the message headers to propagate trace context to the receiving service.
+                    var contextToInject = Activity.Current.Context;
+                    _propagator.Inject(
+                        new PropagationContext(contextToInject, Baggage.Current),
+                        basicProps,
+                        RabbitMqHelper.InjectTraceContextIntoBasicProperties);
+
+                    RabbitMqHelper.AddMessagingTags(Activity.Current, _configuration);
 
                     channel.BasicPublish(
                         exchange: "",
