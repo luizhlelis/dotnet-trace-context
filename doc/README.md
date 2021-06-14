@@ -14,11 +14,11 @@ the first and second APIs have the [same code base](../src/OpenTelemetryApi), bu
 
 ## OpenTelemetry
 
-An important framework used in the present article to deal with the different traces is [OpenTelemetry](https://opentelemetry.io/). As the documentation saids:
+An important framework used in the present article to deal with context propagation is [OpenTelemetry](https://opentelemetry.io/). As the documentation saids:
 
 > OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs.
 
-[OTel](https://opentelemetry.io/docs/concepts/glossary/) provides a vendor-agnostic instrumentation library to generate, emit, collect, process and export telemetry data. That's not only the only purpose of `OTel`, which is composed by multiple components: proto, specification, collector, instrumentation libraries; but that's subject for other article.
+[OTel](https://opentelemetry.io/docs/concepts/glossary/) provides a vendor-agnostic instrumentation library to generate, emit, collect, process and export telemetry data. That's not the only purpose of `OTel`, which is composed by multiple components: proto, specification, collector, instrumentation libraries. Due to the dense content of `OpenTelemetry`, I'll try to approach `OTel` in the current article with a shallow way, because that's subject for other article.
 
 `W3C TraceContext` is one of the [propagators](https://github.com/open-telemetry/opentelemetry-specification/blob/b46bcab5fb709381f1fd52096a19541370c7d1b3/specification/context/api-propagators.md#propagators-distribution) maintained and distributed as extension packages by `OTel`. That's the reason why `OTel` is always related to `W3C TraceContext` and vice versa.
 
@@ -49,7 +49,7 @@ the `OpenTelemetry.Extensions.Hosting` package is responsible for register `Open
     );
 ```
 
-As mentioned before, the `first-api` and the `second-api` have the [same code base](../src/OpenTelemetryApi). For this example, the first is called by a client (`curl`) in `WeatherForecast` route which calls the second one in the `PublishInQueue` route. Both controller methods have a stdout print for `traceparent` and `tracestate`:
+the `zipkin` endpoint that receives telemetry data is `/api/v2/spans`. As mentioned before, the `first-api` and the `second-api` have the [same code base](../src/OpenTelemetryApi). For this example, the first is called by a client (`curl`) in `WeatherForecast` route which calls the second one in the `PublishInQueue` route. Both controller methods have a stdout print for `traceparent` and `tracestate`:
 
 ``` csharp
     [ApiController]
@@ -60,6 +60,7 @@ As mentioned before, the `first-api` and the `second-api` have the [same code ba
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ConnectionFactory _connectionFactory;
+        private readonly TextMapPropagator _propagator = Propagators.DefaultTextMapPropagator;
 
         public WeatherForecastController(
             ILogger<WeatherForecastController> logger,
@@ -92,8 +93,9 @@ As mentioned before, the `first-api` and the `second-api` have the [same code ba
             var message = JsonConvert.SerializeObject(weatherForecast);
             var body = Encoding.UTF8.GetBytes(message);
             var traceparent = Activity.Current.Id;
+            var tracestate = Activity.Current.TraceStateString;
             _logger.LogInformation("Traceparent: {0}", traceparent);
-            _logger.LogInformation("Tracestate: {0}", Activity.Current.TraceStateString);
+            _logger.LogInformation("Tracestate: {0}", tracestate);
 
             using (var connection = _connectionFactory.CreateConnection())
             {
@@ -108,12 +110,14 @@ As mentioned before, the `first-api` and the `second-api` have the [same code ba
 
                     var basicProps = channel.CreateBasicProperties();
 
-                    basicProps.Headers = new Dictionary<string, object>();
-                    basicProps.Headers.TryAdd("traceparent", traceparent);
-                    Activity.Current.SetTag("messaging.system", "rabbitmq");
-                    Activity.Current.SetTag("messaging.destination_kind", "queue");
-                    Activity.Current.SetTag("messaging.destination", "");
-                    Activity.Current.SetTag("messaging.rabbitmq.routing_key", _configuration["RabbitMq:QueueName"]);
+                    // Inject the ActivityContext into the message headers to propagate trace context to the receiving service.
+                    var contextToInject = Activity.Current.Context;
+                    _propagator.Inject(
+                        new PropagationContext(contextToInject, Baggage.Current),
+                        basicProps,
+                        RabbitMqHelper.InjectTraceContextIntoBasicProperties);
+
+                    RabbitMqHelper.AddMessagingTags(Activity.Current, _configuration);
 
                     channel.BasicPublish(
                         exchange: "",
@@ -128,7 +132,24 @@ As mentioned before, the `first-api` and the `second-api` have the [same code ba
     }
 ```
 
-By default, the `ASP.NET core` starts an `Activity` span when the [request is beginning](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L59) and stop it [at the end](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L156) so this kind of setup was not required for the `first-api` and the `second-api`. On the other hand, the manually creation of an activity span is required for the `worker` because that kind of span is outside from http calls, is not an API, but it's a message listener.
+Note that I chose to use a `propagator` to inject the context into a carrier. The `propagator`s are defined in the [Opentelemetry Specification](https://github.com/open-telemetry/opentelemetry-specification) as "objects used to read and write context data to and from messages exchanged by the applications". The spec also recommends that `propagators` must define `Inject` and `Extract` operations, as the main purpose of `PublishInQueue` is publish a message, the `Inject` context operation suits better there, and the `Extract` operation in the `worker`.
+
+Besides that, the propagation fields (`traceparent` and `tracestate`) were added in the message header. In the [last article](https://dev.to/luizhlelis/using-w3c-trace-context-standard-in-distributed-tracing-3743) I said that the the [standard](https://w3c.github.io/trace-context-amqp/) (in the Working Draft (WD) step of the w3c process) recommends to add the propagation fields the `application-properties` section by the message publisher. For the current example, I chose to propagate that context in the message header even for AMQP calls as was done in [the dotnet OpenTelemetry example](https://github.com/open-telemetry/opentelemetry-dotnet/blob/e3df42bfc15dc1d4dff01d655f669f7c27e35312/examples/MicroserviceExample/Utils/Messaging/MessageSender.cs#L78). It's important to reinforce that `Trace Context: AMQP protocol` is not a W3C Recommendation yet. Take a look at the place where the propagation fields were added:
+
+```csharp
+    public static void InjectTraceContextIntoBasicProperties(
+        IBasicProperties props, string key, string value)
+    {
+        if (props.Headers == null)
+        {
+            props.Headers = new Dictionary<string, object>();
+        }
+
+        props.Headers[key] = value;
+    }
+```
+
+By default, the `ASP.NET core` starts an `Activity` span when the [request is beginning](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L59) and stop it [at the end](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L156) so this kind of setup was not required for the `first-api` and the `second-api`. On the other hand, the manually creation of an activity span is required for the `worker` because in that case, it is not dealing with http calls, it's not an API, but a message listener.
 
 > **_NOTE:_** `ASP.NET core` also sets the `traceparent` from the upstream request as [the current activity ParentId](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L289).
 
@@ -154,6 +175,52 @@ and the `OTel`'s dependency injection was configured to the `worker` in `Program
     );
 ```
 
+as mentioned before, for the `worker` was required to configure manually a new span scope for each message read:
+
+```csharp
+    public void MessageHandler(BasicDeliverEventArgs eventArgs)
+    {
+        // Extract the PropagationContext from the upstream service using message headers.
+        var parentContext = _propagator.Extract(
+            default,
+            eventArgs.BasicProperties,
+            RabbitMqHelper.ExtractTraceContextFromBasicProperties);
+        Baggage.Current = parentContext.Baggage;
+
+        using (var activity = _activitySource.StartActivity(
+            _configuration["Zipkin:AppName"],
+            ActivityKind.Consumer,
+            parentContext.ActivityContext))
+        {
+            var body = eventArgs.Body.ToArray();
+            var message = Encoding.UTF8.GetString(body);
+            _logger.LogInformation("Received {0}", message);
+            _logger.LogInformation("Traceparent: {0}", Activity.Current.Id);
+            _logger.LogInformation("Tracestate: {0}", Activity.Current.TraceStateString);
+
+            activity.SetTag("message", message);
+            RabbitMqHelper.AddMessagingTags(activity, _configuration);
+        }
+    }
+```
+
+`MessageHandler` method is triggered when a new message arrives in the queue, so that's the consumption message handler, note that a new span scope is created with `StartActivity` method. The most important thing is: how to configure the new span scope specifying which is the upstream span. The `_propagator` variable is of the type `TraceContextPropagator`, an [opentelemetry-dotnet](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Api/Context/Propagation/TraceContextPropagator.cs) class that is a text map propagator for W3C trace context. Most important parameter of `_propagator.Extract` method is the last one (called `getter`), that's the function which `OTel` will try to use to extract the propagation fields (`traceparent` and `tracestate`). Take a look at the way that `ExtractTraceContextFromBasicProperties` function was configured to the current example:
+
+```csharp
+    public static IEnumerable<string> ExtractTraceContextFromBasicProperties(IBasicProperties props, string key)
+    {
+        if (props.Headers.TryGetValue(key, out var value))
+        {
+            var bytes = value as byte[];
+            return new[] { Encoding.UTF8.GetString(bytes) };
+        }
+
+        return Enumerable.Empty<string>();
+    }
+```
+
+as you can see above, the `worker` is expecting the `traceparent` and `tracestate` in the message header.
+
 ## Running the project
 
 Inside [src folder](./src), type the command below to up all containers (`first-api`, `second-api`, `worker`, `rabbit` and `zipkin`):
@@ -175,7 +242,24 @@ curl --request POST \
 }'
 ```
 
-the message that you sent above will travel throughout the flow (`first-api` > `second-api` >  `rabbit` > `worker`) along with the propagation fields (`traceparent` and `tracestate`). To see the generated distributed tracing diagram, access `zipkin` in your browser:
+the message that you sent above will travel throughout the flow (`first-api` > `second-api` >  `rabbit` > `worker`) along with the propagation fields (`traceparent` and `tracestate`). Take a look at the application `stdout`:
+
+```log
+first-api     | info: OpenTelemetryApi.Controllers.WeatherForecastController[0]
+first-api     |       Traceparent: 00-0a0578c18192c14bae738b777e072a42-2db0e8c6b4654744-01
+first-api     | info: OpenTelemetryApi.Controllers.WeatherForecastController[0]
+first-api     |       Tracestate: (null)
+second-api    | info: OpenTelemetryApi.Controllers.WeatherForecastController[0]
+second-api    |       Traceparent: 00-0a0578c18192c14bae738b777e072a42-bfc08418aeb71a4e-01
+second-api    | info: OpenTelemetryApi.Controllers.WeatherForecastController[0]
+second-api    |       Tracestate: (null)
+worker        | info: Worker.WorkerService[0]
+worker        |       Traceparent: 00-0a0578c18192c14bae738b777e072a42-004468438f2d724c-01
+worker        | info: Worker.WorkerService[0]
+worker        |       Tracestate: (null)
+```
+
+note the `trace-id` (`0a0578c18192c14bae738b777e072a42`) remaining the same throughout all the trace, and the `span-id` (or `parent-id`) been updated between the applications (`2db0e8c6b4654744`, `bfc08418aeb71a4e` and `004468438f2d724c`). To see the generated distributed tracing diagram, access `zipkin` in your browser:
 
 ```bash
   http://localhost:9411/
@@ -185,12 +269,20 @@ at home page, let the search field empty and type `RUN QUERY` to load all traces
 
 ![Zipkin Diagram](zipkin-diagram.png)
 
-## Trace context propagation through http calls
+## Conclusion
 
-As the standard recommends, fields `traceparent` and `tracestate` SHOULD be added in the request header.
+The W3C Trace Context standard came to define a standard to the distributed tracing propagation. Currently, there is only one `W3C Recommendation` which is for HTTP calls (launched in february 2020), all the other standards are in working in process (AMQP, MQTT and baggage). It doesn't mean that you should avoid to use the standard in a production environment, but keep in mind that some things are going to change and is important to be up to date with newer releases.
 
-## Trace context propagation through AMQP calls
+If you got until here and liked the article content, let me know reacting to the current post. You can also open a discussion below, I'll try to answer soon. On the other hand, if you think that I said something wrong, please open an issue in the [article's github repo](https://github.com/luizhlelis/dotnet-trace-context). In the next article, I'll show a full distributed trace example in a microsservice architecture, just like this, but using `python` with `django`. Hope you like it!
 
-As the standard recommends, fields `traceparent` and `tracestate` SHOULD be added to the message in the `application-properties` section by message publisher. Message reader SHOULD construct the full trace context by reading `traceparent` and `tracestate` fields from the `message-annotations` first and if not exist - from `application-properties`.
+## References
 
-Nevertheless, as Trace context for AMQP standard is very recent, not all packages and libraries are updated to deal with `traceparent` and `tracestate` propagation, that's the reason why OSS libraries like [NServiceBus](https://github.com/Particular/NServiceBus) or also [Opentelemetry](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/examples/MicroserviceExample/Utils/Messaging/MessageReceiver.cs#L91) add them in the message header. This application follows the libraries examples adding `traceparent` in the message header.
+DRUTU, Bogdan; KANZHELEV, Sergey; MCLEAN, Morgan; MOLNAR, Nik; REITBAUER, Alois; SHKURO, Yuri. [W3C Recommendation - Trace Context](https://www.w3.org/TR/trace-context/)
+
+KANZHELEV, Sergey; VASTERS, Clemens. [W3C Editor's draft - Trace Context: AMQP protocol](https://w3c.github.io/trace-context-amqp/)
+
+OPENTELEMETRY, Community. [OpenTelemetry .NET](https://github.com/open-telemetry/opentelemetry-dotnet)
+
+OPENTELEMETRY, Community. [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
+
+OPENTELEMETRY, Community. [OpenTelemetry Specification](https://github.com/open-telemetry/opentelemetry-specification)
