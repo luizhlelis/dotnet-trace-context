@@ -21,7 +21,7 @@ services:
     env_file:
       - .env
     environment: 
-      - Zipkin__AppName=first-api
+      - Zipkin__ServiceName=first-api
     volumes:
       - ./OpenTelemetryApi:/api
       - /obj/Debug/
@@ -38,7 +38,7 @@ services:
     env_file:
       - .env
     environment: 
-      - Zipkin__AppName=second-api
+      - Zipkin__ServiceName=second-api
     volumes:
       - ./OpenTelemetryApi:/api
       - /obj/Debug/
@@ -55,7 +55,7 @@ services:
     env_file:
       - .env
     environment: 
-      - Zipkin__AppName=worker
+      - Zipkin__ServiceName=worker
     volumes:
       - .:/continuous
       - /obj/Debug/

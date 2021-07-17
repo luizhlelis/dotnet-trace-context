@@ -55,13 +55,12 @@ namespace OpenTelemetryApi
             });
 
             services.AddOpenTelemetryTracing(builder => builder
-                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Configuration["Zipkin:AppName"]))
-                .AddZipkinExporter(o =>
-                    {
-                        o.Endpoint = new Uri(Configuration["Zipkin:Url"]);
-                    })
                 .AddAspNetCoreInstrumentation()
+                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Configuration["Zipkin:ServiceName"]))
+                .AddZipkinExporter()
             );
+
+            services.Configure<ZipkinExporterOptions>(Configuration.GetSection("Zipkin"));
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

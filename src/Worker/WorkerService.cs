@@ -21,12 +21,13 @@ namespace Worker
         private readonly IConnection _rabbitConnection;
         private readonly IModel _rabbitChanel;
         private readonly TextMapPropagator _propagator;
-        private static readonly ActivitySource _activitySource = new ActivitySource(nameof(WorkerService));
+        private readonly ActivitySource _activitySource;
 
         public WorkerService(
             ILogger<WorkerService> logger,
             IConfiguration configuration,
-            ConnectionFactory connectionFactory)
+            ConnectionFactory connectionFactory,
+            ActivitySource activitySource)
         {
             _logger = logger;
             _configuration = configuration;
@@ -35,6 +36,7 @@ namespace Worker
             _rabbitConnection = _connectionFactory.CreateConnection();
             _rabbitChanel = _rabbitConnection.CreateModel();
             _propagator = new TraceContextPropagator();
+            _activitySource = activitySource;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
