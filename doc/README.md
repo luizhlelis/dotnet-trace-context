@@ -33,22 +33,21 @@ The default diagnostics library in `.NET 5`, called [System.Diagnostics](https:/
 The `first-api` and the `second-api` showed in [Figure 1](#firstfigure) requires three packages to work properly with `OpenTelemetry`:
 
 ``` csharp
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc2" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.0.0-rc2" />
-    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.0.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc7" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.0.0-rc7" />
+    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.1.0" />
 ```
 
 the `OpenTelemetry.Extensions.Hosting` package is responsible for register `OpenTelemetry` into the application using Dependency Injection, the `OpenTelemetry.Instrumentation.AspNetCore` and `OpenTelemetry.Exporter.Zipkin` packages represent two source components of `OpenTelemetry` framework: the instrumentation library and the collector, respectively. The [instrumentation library](https://opentelemetry.io/docs/concepts/instrumenting/) is responsible for inject the observable information from libraries and applications into the OpenTelemetry API. On the other hand, the [collector](https://opentelemetry.io/docs/concepts/data-collection/) offers a vendor-agnostic implementation on how to receive, process, and export telemetry data. The exporter is the place where to send the received data (`zipkin` was the chosen for our example). The `OTel`'s dependency injection was done in `Startup.cs`:
 
 ``` csharp
     services.AddOpenTelemetryTracing(builder => builder
-        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Configuration["Zipkin:AppName"]))
-        .AddZipkinExporter(o =>
-            {
-                o.Endpoint = new Uri(Configuration["Zipkin:Url"]);
-            })
         .AddAspNetCoreInstrumentation()
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Configuration["Zipkin:ServiceName"]))
+        .AddZipkinExporter()
     );
+
+    services.Configure<ZipkinExporterOptions>(Configuration.GetSection("Zipkin"));
 ```
 
 the `zipkin` endpoint that receives telemetry data is `/api/v2/spans`. As mentioned before, the `first-api` and the `second-api` have the [same code base](../src/OpenTelemetryApi). For this example, the first is called by a client (`curl`) in `WeatherForecast` route, which calls the second one in the `PublishInQueue` route. Both controller methods have a `stdout` print for `traceparent` and `tracestate`:
@@ -158,26 +157,26 @@ By default, the `ASP.NET core` starts an `Activity` span when the [request is be
 For the `worker` those packages are required:
 
 ``` csharp
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc2" />
-    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.0.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc7" />
+    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.1.0" />
 ```
 
 and the `OTel`'s dependency injection was configured to the `worker` in `Program.cs` like the following bellow:
 
 ``` csharp
-    services.AddOpenTelemetryTracing(config => config
-        .SetResourceBuilder(ResourceBuilder
-            .CreateDefault()
-            .AddService(typeof(WorkerBackgroundService).Namespace))
-        .AddSource(typeof(WorkerBackgroundService).Namespace)
-        .AddZipkinExporter(o =>
-        {
-            o.Endpoint = new Uri(configuration["Zipkin:Url"]);
-        })
-    );
+services.AddOpenTelemetryTracing(config => config
+    .SetResourceBuilder(ResourceBuilder
+        .CreateDefault()
+        .AddService(configuration["Zipkin:ServiceName"]))
+    .AddSource(configuration["Zipkin:ServiceName"])
+    .AddZipkinExporter()
+);
+
+services.Configure<ZipkinExporterOptions>(configuration.GetSection("Zipkin"));
+services.AddSingleton(new ActivitySource(configuration["Zipkin:ServiceName"]));
 ```
 
-as mentioned before, for the `worker` was required to configure manually a new span scope for each message read:
+It's important to mention that `ActivitySource` denotes a [Tracer](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#tracer), which is used to start spans. As mentioned before, for the `worker` was required to configure manually a new span scope for each message read:
 
 ```csharp
     public void MessageHandler(BasicDeliverEventArgs eventArgs)
