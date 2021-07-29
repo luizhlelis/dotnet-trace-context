@@ -6,7 +6,7 @@ services:
     ports:
       - "9411:9411"
   rabbit:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.5
     container_name: rabbit
     ports:
       - "5672:5672"
