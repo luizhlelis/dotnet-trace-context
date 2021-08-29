@@ -150,7 +150,7 @@ Besides that, the propagation fields (`traceparent` and `tracestate`) were added
     }
 ```
 
-By default, the `ASP.NET core` starts an `Activity` span when the [request is beginning](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L59) and stop it [at the end](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L156). For that reason this kind of setup is not required for the `first-api` and the `second-api`. On the other hand, the manually creation of an activity span is required for the `worker` because in that case, it's not dealing with http calls, neither an API, but a message listener.
+By default, the `ASP.NET core` starts an `Activity` span when the [request is beginning](https://github.com/dotnet/aspnetcore/blob/867cec475d18892b828ac44a82d74eccfbbb0e49/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L65) and stop it [at the end](https://github.com/dotnet/aspnetcore/blob/867cec475d18892b828ac44a82d74eccfbbb0e49/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L162). For that reason this kind of setup is not required for the `first-api` and the `second-api`. On the other hand, the manually creation of an activity span is required for the `worker` because in that case, it's not dealing with http calls, neither an API, but a message listener.
 
 > **_NOTE:_** `ASP.NET core` also sets the `traceparent` from the upstream request as [the current activity ParentId](https://github.com/dotnet/aspnetcore/blob/main/src/Hosting/Hosting/src/Internal/HostingApplicationDiagnostics.cs#L289).
 
